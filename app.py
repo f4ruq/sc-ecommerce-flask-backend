@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+import google.generativeai as genai
 import requests
 import os
 
@@ -6,12 +7,15 @@ app = Flask(__name__)
 
 # ENV değişkenlerini çek (Cloud Run panelinden girilecek)
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
 
 GRAPH_API_URL = f"https://graph.facebook.com/v17.0/{PHONE_NUMBER_ID}/messages"
 
-
+genai.configure(api_key=GEMINI_API_KEY)
+version = 'models/gemini-2.0-flash'
+model = genai.GenerativeModel(version)
 # ---------------------------------------------------
 # WEBHOOK DOĞRULAMA (GET)
 # ---------------------------------------------------
@@ -23,7 +27,7 @@ def verify_webhook():
     mode = request.args.get("hub.mode")
     token = request.args.get("hub.verify_token")
     challenge = request.args.get("hub.challenge")
-
+    
     print("mode:", mode)
     print("token:", token)
     print("challenge:", challenge)
@@ -48,11 +52,11 @@ def webhook():
     try:
         message = data["entry"][0]["changes"][0]["value"]["messages"][0]
         sender = message["from"]
-        text = message["text"]["body"]
-
-        print(f"Kullanıcıdan mesaj geldi: {text}")
-
-        send_message(sender, f"sv calisiyor: {text}")
+        user_text = message["text"]["body"]
+        response = model.generate_content(user_text)
+        print(f"Kullanıcıdan mesaj geldi: {user_text}")
+        
+        send_message(sender, response.text)
 
     except Exception as e:
         print("Mesaj işlenemedi:", e)
@@ -61,7 +65,7 @@ def webhook():
 
 
 # ---------------------------------------------------
-# MESAJ GÖNDERME FONKSİYONU
+# MESAJ GÖNDERME FONKSİYONU 
 # ---------------------------------------------------
 def send_message(to, message):
     headers = {
